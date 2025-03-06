@@ -1,7 +1,6 @@
-# htf-macd-tradingview
+# Higher Timeframe MACD [Jenny981746]
 A MACD indicator that can show higher timeframe MACD on a lower timeframe  
 
-Higher Timeframe MACD [Jenny981746]
 
 **Reason for Development**  
 I need to monitor both lower timeframe and higher timeframe MACD's histogram value changes simultaneously on a lower timeframe. I found that the multiple timeframe MACD indicators developed by others tend to have delays, making it impossible to see the real-time status of MACD momentum. Therefore, I decided to develop my own indicator.
