@@ -1,0 +1,223 @@
+//@version=5
+indicator(title='Higher Timeframe MACD[Jenny981746]', shorttitle='HTF MACD[Jenny981746]', overlay=false, max_bars_back = 5000)
+import PineCoders/Time/3
+
+
+// Getting inputs
+fast_length = input(title='Fast Length', defval=12)
+slow_length = input(title='Slow Length', defval=26)
+src = input(title='Source', defval=close)
+signal_length = input.int(title='Signal Smoothing', minval=1, defval=9)
+sma_source = input.string(title='Oscillator MA Type', defval='EMA', options=['SMA', 'EMA'])
+sma_signal = input.string(title='Signal Line MA Type', defval='EMA', options=['SMA', 'EMA'])
+
+
+// Plot colors
+col_macd = input.color(#2962FF, title='MACD Line  ', group='Color Settings', inline='MACD')
+col_signal = input.color(#FF6D00, title='Signal Line  ', group='Color Settings', inline='Signal')
+col_grow_above = input.color(#26A69A, title='Above   Grow', group='Histogram', inline='Above')
+// col_fall_above = input.color(#B2DFDB, title='Fall', group='Histogram', inline='Above')
+col_fall_above = input.color(#c8e6c9, title='Fall', group='Histogram', inline='Above')
+
+// col_grow_below = input.color(#FFCDD2, title='Below Grow', group='Histogram', inline='Below')
+col_grow_below = input.color(#ffe0b2, title='Below Grow', group='Histogram', inline='Below')
+
+col_fall_below = input.color(#FF5252, title='Fall', group='Histogram', inline='Below')
+
+
+// Calculating
+fast_ma = sma_source == 'SMA' ? ta.sma(src, fast_length) : ta.ema(src, fast_length)
+slow_ma = sma_source == 'SMA' ? ta.sma(src, slow_length) : ta.ema(src, slow_length)
+macd = fast_ma - slow_ma
+signal = sma_signal == 'SMA' ? ta.sma(macd, signal_length) : ta.ema(macd, signal_length)
+hist = macd - signal
+
+
+// Bar Style
+// Bar stayle that user selected
+gray_style = input(false, 'Do you want to use gray style for grouping higher timeframe data?')
+is_mode_dotted_checked = input(true, 'Do you want to seperate historical data and real time data with dot?(blue for historical, red for realtime)')
+
+
+// Calculate Higher Timeframe MACD
+// Higher Timeframe that user selected
+res = input.timeframe(title='Target Higher Timeframe', defval='D')
+float inputHigherTimeframe_TFInSeconds = timeframe.in_seconds(res)
+float currentTimeframe_TFInSeconds = timeframe.in_seconds(timeframe.period)
+split_period = inputHigherTimeframe_TFInSeconds / currentTimeframe_TFInSeconds
+
+// 這一個security function參數是gaps_on,lookahead_on是畫歷史資料會用到
+[htf_macd, htf_signal, htf_hist] = request.security(syminfo.tickerid, res, [fast_ma - slow_ma, signal, fast_ma - slow_ma - signal], barmerge.gaps_on, barmerge.lookahead_on)
+
+// 還要一個畫realtime資料會用到的security function
+[realtime_htf_macd, realtime_htf_signal, realtime_htf_hist] = request.security(syminfo.tickerid, res, [fast_ma - slow_ma, signal, fast_ma - slow_ma - signal], barmerge.gaps_off, barmerge.lookahead_on)
+
+
+// 我們利用gaps_on參數，也就是有值或na的狀況，我們才能去判斷分組
+// count計算不能亂換位置，因為下方會重新處理值，把na的值去掉
+// 所以count區塊必須在把na值去掉之前發生
+count = float(0.0)
+count := na(htf_macd) == false ? 1 : count[1] + 1
+
+// 歷史資料使用security fucntion使用gaps_on參數時，一組的第一個值會有值，其他的位置會回傳na
+// 所以還要再處理過
+htf_macd := na(htf_macd) ? htf_macd[1] : htf_macd
+htf_signal := na(htf_signal) ? htf_signal[1] : htf_signal
+htf_hist := na(htf_hist) ? htf_hist[1] : htf_hist
+
+
+
+
+///////////////////////////////////////////
+/////0軸與分組標記區塊------------------開始
+//////////////////////////////////////////
+
+// 舊0軸線 - 無分組標記
+// hline(0, "Zero Line", color=color.gray,linewidth = 2,linestyle = hline.style_solid)
+
+// 0軸與分組標記為同一條
+// 分組顏色現在統一用深灰色，使用者也可以在input區域，自選兩種顏色做分組區隔
+group_color1 = input.color(color.rgb(108, 110, 117), title='group_color1', group='grouping identifier', inline='group')
+group_color2 = input.color(color.rgb(108, 110, 117), title='group_color2', group='grouping identifier', inline='group')
+
+total_groupcount = float(0.0)
+total_groupcount := bar_index == 0 ? 0 : count == 1 ? total_groupcount[1] + 1 : total_groupcount[1]
+
+colorfill = color(na)
+isnewGroup = false
+if count == 1 and total_groupcount % 2 == 0  //剛進入組數為偶數
+    isnewGroup := true
+    // 分組第一個位置不畫線，因為如果畫的畫，pinescript會往前再畫半格(這是特性)
+    colorfill := na
+    
+
+//剛進入組數為奇數
+else if count == 1 and total_groupcount % 2 != 0
+    isnewGroup := true
+    // 分組第一個位置不畫線，因為如果畫的畫，pinescript會往前再畫半格(這是特性)
+    colorfill := na
+    
+
+else if count != 1 and total_groupcount % 2 == 0
+    colorfill := group_color1
+    
+
+else if count != 1 and total_groupcount % 2 != 0
+    colorfill := group_color2
+    
+
+
+// 繪製0軸與分組標記
+plot(0, color=colorfill, linewidth=5, style=plot.style_line)
+
+
+///////////////////////////////////////////
+/////0軸與分組標記區塊------------------結束
+//////////////////////////////////////////
+
+////////////////////////////////////////////////////////////////
+/////分組標記第二次處理-建立colorfill style
+/////在0軸的每一組第一個位置，加上小十字符號---------------開始
+////////////////////////////////////////////////////////////////
+// 必須在畫完histogram後再畫小十字
+// 這樣疊上去比較明顯
+// 所以畫小十字符號的plot函數放在後面的區塊，這裡就只處理colorfill style
+
+if count == 1 and total_groupcount % 2 == 0  //剛進入組數為偶數
+    isnewGroup := true
+    // 分組第一個位置畫小十字符號
+    colorfill := group_color1
+    
+
+//剛進入組數為奇數
+else if count == 1 and total_groupcount % 2 != 0
+    isnewGroup := true
+    // 分組第一個位置畫小十字符號
+    colorfill := group_color2
+    
+
+else if count != 1 and total_groupcount % 2 == 0
+    colorfill := na
+    
+
+else if count != 1 and total_groupcount % 2 != 0
+    colorfill := na
+    
+
+
+
+////////////////////////////////////////////////////////////////
+/////分組標記第二次處理-建立colorfill style
+/////在0軸的每一組第一個位置，加上小十字符號---------------結束
+////////////////////////////////////////////////////////////////
+
+
+///////////////////////////////////////////
+/////建立量能柱顏色style----------------開始
+//////////////////////////////////////////
+
+// 本來要讓使用者自己計算「幾根小時框K棒，為一根大時框K棒」，現在改為自動計算，所以先註解掉
+// split_period = input(title='Please Calculate HTF Period/LTF Period(EX: Daily TF is 1440m, 4H TF is 240m, 1440/240 = 6)', defval=6)
+
+// make bar stayle selectable
+make_color_style(gray_style) =>
+
+
+    if barstate.isrealtime == false  // 歷史模式
+
+        // 上一組第一個值htf_hist[split_period]
+        // 上一組最後一個值htf_hist[count]
+        // 在歷史資料中，"上一組第一個值"與"上一組最後一個值"是一樣的
+        // 所以只用了htf_hist[split_period]來做判斷
+        if gray_style
+            count == 1 and htf_hist >= 0 ? htf_hist[split_period] < htf_hist ? col_grow_above : col_fall_above : count == 1 and htf_hist < 0 ? htf_hist[split_period] < htf_hist ? col_grow_below : col_fall_below : color.rgb(215, 215, 215)
+        else
+            count == 1 and htf_hist >= 0 ? htf_hist[split_period] < htf_hist ? col_grow_above : col_fall_above : count == 1 and htf_hist < 0 ? htf_hist[split_period] < htf_hist ? col_grow_below : col_fall_below : count != 1 and htf_hist >= 0 ? htf_hist[split_period] < htf_hist ? col_grow_above : col_fall_above : count != 1 and htf_hist < 0 ? htf_hist[split_period] < htf_hist ? col_grow_below : col_fall_below : na
+    else
+
+// real time模式
+
+        // 注意！在real time模式下，"上一組第一個值"與"上一組最後一個值"是不同的
+        // real time模式下比的是"上一組最後一個值"
+        // 上一組最後一個值realtime_htf_hist[count]，用的是realtime_htf_hist這個series
+        if gray_style
+            count == 1 and realtime_htf_hist >= 0 ? realtime_htf_hist[count] < realtime_htf_hist ? col_grow_above : col_fall_above : count == 1 and realtime_htf_hist < 0 ? realtime_htf_hist[count] < realtime_htf_hist ? col_grow_below : col_fall_below : color.rgb(215, 215, 215)
+        else
+            count == 1 and realtime_htf_hist >= 0 ? realtime_htf_hist[count] < realtime_htf_hist ? col_grow_above : col_fall_above : count == 1 and realtime_htf_hist < 0 ? realtime_htf_hist[count] < realtime_htf_hist ? col_grow_below : col_fall_below : count != 1 and realtime_htf_hist >= 0 ? realtime_htf_hist[count] < realtime_htf_hist ? col_grow_above : col_fall_above : count != 1 and realtime_htf_hist < 0 ? realtime_htf_hist[count] < realtime_htf_hist ? col_grow_below : col_fall_below : na
+
+///////////////////////////////////////////
+/////建立量能柱顏色style----------------結束
+//////////////////////////////////////////
+
+make_mode_dotted_color() =>
+    if is_mode_dotted_checked and barstate.isrealtime
+        color.red
+    else if is_mode_dotted_checked and barstate.isrealtime != true
+        color.blue
+
+
+// 繪製量能柱
+// 以barstate.isrealtime參數判斷目前是歷史資料模式還是real time模式
+// 歷史資料模式下使用htf_hist資料集，realtime模式下使用realtime_htf_hist資料集
+plot(barstate.isrealtime == false ? htf_hist : realtime_htf_hist, title='Histogram', style=plot.style_columns, color=make_color_style(gray_style))
+
+
+//繪製分組標記第二次處理 - 畫小十字符號
+plot(0, title='Histogram', linewidth=3, style=plot.style_cross, color=colorfill)
+
+
+// 繪製點點以區分目前的模式
+// 藍色點為歷史資料模式、紅色點為real time模式
+plot(barstate.isrealtime == false ? htf_hist : realtime_htf_hist, title='Histogram', style=plot.style_circles, color=make_mode_dotted_color(), linewidth=1)
+
+
+// 繪製快線與慢線(黃藍線)
+// 黃藍線在歷史資料轉realtime資料後，會有問題，與小K棒的量能柱上色後，就無法依據最新值來更新的問題一樣
+// 用plot函數是無法處理的，這邊先不動，那要找其他的方式實作
+// 現在改成realtime時，每根小K更新大級別資料，而不是整組更新，整組更新的版本在BOX()版那邊
+plot(realtime_htf_macd, title='MACD', color=col_macd)
+plot(realtime_htf_signal, title='Signal', color=col_signal)
+
+
+
+
