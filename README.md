@@ -1,4 +1,4 @@
-# Higher Timeframe MACD [Jenny981746]
+# Higher Timeframe MACD
 A MACD indicator that can show higher timeframe MACD on a lower timeframe  
 
 
